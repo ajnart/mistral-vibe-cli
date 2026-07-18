@@ -41,7 +41,7 @@ _MIN_REVERSALS = 2  # need a real back-and-forth, not a single drift, to fire
 _COOLDOWN_S = 1.5  # ignore new gestures right after one fires (debounce)
 
 
-def _reversals(vals: list[float]) -> int:
+def _reversals(vals: list[float], jitter: float = _JITTER) -> int:
     """Count direction changes in a 1-D track, ignoring sub-jitter wobble.
 
     A deliberate nod/shake oscillates (down-up-down / left-right-left), giving >= 2
@@ -50,21 +50,26 @@ def _reversals(vals: list[float]) -> int:
     signs: list[int] = []
     for a, b in zip(vals, vals[1:], strict=False):
         d = b - a
-        if abs(d) < _JITTER:
+        if abs(d) < jitter:
             continue
         signs.append(1 if d > 0 else -1)
     return sum(1 for a, b in zip(signs, signs[1:], strict=False) if a != b)
 
 
 def classify_gesture(
-    xs: list[float], ys: list[float], amplitude: float = _AMPLITUDE
+    xs: list[float],
+    ys: list[float],
+    amplitude: float = _AMPLITUDE,
+    jitter: float = _JITTER,
+    min_reversals: int = _MIN_REVERSALS,
 ) -> str | None:
     """Return "yes" (nod), "no" (shake), or None from recent motion tracks.
 
     xs/ys are oldest-first horizontal/vertical signals. With the Haar fallback these
     are face-center positions (frame fractions); with the YuNet landmark path they
-    are head yaw/pitch (nose vs. eyes, inter-ocular-normalized) — hence the tunable
-    ``amplitude`` threshold, since the two signals live on different scales.
+    are head yaw/pitch (nose vs. eyes, inter-ocular-normalized). Those live on very
+    different scales and noise levels, so ``amplitude`` (min travel to count) and
+    ``jitter`` (per-frame noise floor) are tunable per caller.
     """
     if len(ys) < _MIN_SAMPLES:
         return None
@@ -74,14 +79,14 @@ def classify_gesture(
     if (
         amp_y > amplitude
         and amp_y > amp_x * _DOMINANCE
-        and _reversals(ys) >= _MIN_REVERSALS
+        and _reversals(ys, jitter) >= min_reversals
     ):
         return "yes"
     # Horizontal oscillation, dominant over vertical => shake => no.
     if (
         amp_x > amplitude
         and amp_x > amp_y * _DOMINANCE
-        and _reversals(xs) >= _MIN_REVERSALS
+        and _reversals(xs, jitter) >= min_reversals
     ):
         return "no"
     return None

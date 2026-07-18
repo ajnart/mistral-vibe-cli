@@ -50,10 +50,16 @@ _MISS_GRACE = 8  # keep the box/track alive this many frames after losing the fa
 _RESET_S = 5.0  # forget a half-finished confirmation after this idle gap
 _SMOOTH = 0.4  # EMA weight for the drawn box (lower = smoother, less flashy)
 _LINE = 16  # cv2.LINE_AA
-# Head yaw/pitch (nose vs. eyes, normalized by inter-ocular distance) is a smaller,
-# different-scale signal than face-box translation — needs its own amplitude gate.
-# Raise to require a bigger head turn/nod, lower if it feels sluggish.
-_POSE_AMPLITUDE = 0.16
+# Head yaw/pitch (nose vs. eyes, normalized by inter-ocular distance) is a different
+# scale AND noisier than face-box translation (landmark jitter is divided by the
+# small inter-ocular distance). So it gets its own, deliberately strict gates:
+# a real nod/shake clears ~0.6-1.0 peak-to-peak, while noise sits under ~0.1.
+# Raise _POSE_AMPLITUDE if it still triggers on small movements; lower if sluggish.
+_POSE_AMPLITUDE = 0.40  # min peak-to-peak yaw/pitch swing for a real gesture
+_POSE_JITTER = 0.05  # per-frame noise floor (kills landmark-jitter fake reversals)
+_POSE_MIN_REVERSALS = (
+    2  # a clear back-and-forth per rep (amplitude already gates noise)
+)
 _MIN_MODEL_BYTES = 10_000  # a truncated/failed YuNet download is smaller than this
 _YUNET_URL = (
     "https://github.com/opencv/opencv_zoo/raw/main/models/"
@@ -288,8 +294,16 @@ class _Session:
         pending, count = self.progress
         if count and now - self.last_fire > _RESET_S:
             pending, count = None, 0
-        amp = _POSE_AMPLITUDE if self.pose_mode else 0.09
-        gesture = classify_gesture(list(self.xs), list(self.ys), amplitude=amp)
+        if self.pose_mode:
+            gesture = classify_gesture(
+                list(self.xs),
+                list(self.ys),
+                amplitude=_POSE_AMPLITUDE,
+                jitter=_POSE_JITTER,
+                min_reversals=_POSE_MIN_REVERSALS,
+            )
+        else:
+            gesture = classify_gesture(list(self.xs), list(self.ys))  # Haar defaults
         if not gesture or now - self.last_fire <= _COOLDOWN_S:
             self.progress = (pending, count)
             return None
