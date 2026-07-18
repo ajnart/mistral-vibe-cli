@@ -1,0 +1,27 @@
+vibe/core/config/_settings.py
+  s_75684c583542d2::t_0a705026def61f 267
+vibe/cli/textual_ui/head_gesture.py
+  s_75684c583542d2::t_b30da6da896ed2 6-12,23,29,33,75,77-78,90-91,94-106,108-109,111-119,121-128,134-135,137-139,142-143,145-150
+  s_75684c583542d2::t_20316683df3185 120
+vibe/cli/textual_ui/head_gesture_worker.py
+  s_75684c583542d2::t_bc7492b0f7f5de 17
+  s_75684c583542d2::t_38e5c122cc28ff 1-16,18-19,21-59,62-64,66-69,71-84,105-106,109-120
+  s_75684c583542d2::t_197b802fb08e04 60-61,65,70,85-104,107-108
+  s_75684c583542d2::t_f78bab201139b8 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "1a483851cf6845f1f571b9d1c9a7e2bcf77ba50f",
+  "prompts": {},
+  "sessions": {
+    "s_75684c583542d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d0de606-dfe7-4016-b195-165d2a24e8db",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Thomas Camlong <thomas@ajnart.fr>"
+    }
+  }
+}
