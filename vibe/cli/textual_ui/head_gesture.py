@@ -32,17 +32,19 @@ _WORKER_MODULE = "vibe.cli.textual_ui.head_gesture_worker"
 # independent. Tuned by hand against a 720p webcam at ~15 fps — recalibrate if the
 # gesture feels too twitchy or too sluggish. Shared with the worker process.
 _WINDOW = 20  # ~1.3s of frames; the rolling buffer of face centers we classify over
-_MIN_SAMPLES = 8  # need enough motion history before we trust a verdict
-_AMPLITUDE = 0.05  # min peak-to-peak travel of the face center to count as a gesture
-_DOMINANCE = 1.3  # the moving axis must out-travel the other by this factor
-_JITTER = 0.004  # per-frame deltas smaller than this are noise, not motion
+_MIN_SAMPLES = 10  # need enough motion history before we trust a verdict
+_AMPLITUDE = 0.09  # min peak-to-peak travel of the face center to count as a gesture
+_DOMINANCE = 1.4  # the moving axis must out-travel the other by this factor
+_JITTER = 0.008  # per-frame deltas smaller than this are noise (Haar box wobble)
+_MIN_REVERSALS = 2  # need a real back-and-forth, not a single drift, to fire
 _COOLDOWN_S = 1.5  # ignore new gestures right after one fires (debounce)
 
 
 def _reversals(vals: list[float]) -> int:
     """Count direction changes in a 1-D track, ignoring sub-jitter wobble.
 
-    A nod ("down then up") or shake ("left then right") shows up as >= 1 reversal.
+    A deliberate nod/shake oscillates (down-up-down / left-right-left), giving >= 2
+    reversals; a slow drift or a single lean gives 0-1, which we reject.
     """
     signs: list[int] = []
     for a, b in zip(vals, vals[1:], strict=False):
@@ -63,10 +65,18 @@ def classify_gesture(xs: list[float], ys: list[float]) -> str | None:
     amp_x = max(xs) - min(xs)
     amp_y = max(ys) - min(ys)
     # Vertical oscillation, dominant over horizontal => nod => yes.
-    if amp_y > _AMPLITUDE and amp_y > amp_x * _DOMINANCE and _reversals(ys) >= 1:
+    if (
+        amp_y > _AMPLITUDE
+        and amp_y > amp_x * _DOMINANCE
+        and _reversals(ys) >= _MIN_REVERSALS
+    ):
         return "yes"
     # Horizontal oscillation, dominant over vertical => shake => no.
-    if amp_x > _AMPLITUDE and amp_x > amp_y * _DOMINANCE and _reversals(xs) >= 1:
+    if (
+        amp_x > _AMPLITUDE
+        and amp_x > amp_y * _DOMINANCE
+        and _reversals(xs) >= _MIN_REVERSALS
+    ):
         return "no"
     return None
 

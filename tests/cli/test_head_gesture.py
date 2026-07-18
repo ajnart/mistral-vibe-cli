@@ -52,6 +52,20 @@ def test_diagonal_ambiguous_is_none() -> None:
     assert classify_gesture(diag, list(diag)) is None
 
 
+def test_single_lean_is_none() -> None:
+    # A one-way lean (down, no return) has only 1 reversal — must not fire.
+    ys = [0.50, 0.52, 0.55, 0.58, 0.60, 0.62, 0.63, 0.64, 0.65, 0.66]
+    xs = [0.50] * len(ys)
+    assert classify_gesture(xs, ys) is None
+
+
+def test_slow_drift_is_none() -> None:
+    # Big but monotonic drift (e.g. leaning in): amplitude passes, 0 reversals — reject.
+    ys = [0.40 + i * 0.02 for i in range(10)]  # 0.40 -> 0.58, no back-and-forth
+    xs = [0.50] * len(ys)
+    assert classify_gesture(xs, ys) is None
+
+
 if __name__ == "__main__":
     test_nod_is_yes()
     test_shake_is_no()
@@ -59,4 +73,6 @@ if __name__ == "__main__":
     test_tiny_jitter_is_none()
     test_too_few_samples_is_none()
     test_diagonal_ambiguous_is_none()
+    test_single_lean_is_none()
+    test_slow_drift_is_none()
     print("all head-gesture classifier checks passed")
