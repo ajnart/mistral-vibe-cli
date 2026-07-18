@@ -321,7 +321,7 @@ Toggle voice mode on or off with the `/voice` slash command:
 > [!WARNING]
 > Head-gesture approval is experimental and disabled by default.
 
-Approve or deny tool permission prompts with your head via the webcam — **nod twice** (up/down) to allow once, **shake twice** (left/right) to deny. A small preview window (top-right) shows the tracked face and a motion trail, counts your repetitions, and plays a green tick / red cross once confirmed. Keyboard approval keeps working as usual; gestures are just an extra input on the same prompt.
+Approve or deny tool permission prompts with your head via the webcam — **nod twice** (up/down) to allow once, **shake twice** (left/right) to deny. A small preview window (top-right) shows the tracked face with eye/nose landmarks and a motion trail, the command the agent wants to run, a repetition counter, and a green tick / red cross once confirmed. Head tracking uses OpenCV's YuNet detector and reads head rotation from the nose vs. eyes, so a natural head-shake works without sliding your whole head. Keyboard approval keeps working as usual; gestures are just an extra input on the same prompt.
 
 It uses OpenCV Haar-cascade face tracking, which ships as an optional extra so the base install stays lean:
 

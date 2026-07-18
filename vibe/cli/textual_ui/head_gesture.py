@@ -20,6 +20,7 @@ classify head *pose* (pitch/yaw) instead of bounding-box centroid drift.
 from __future__ import annotations
 
 from collections.abc import Callable
+import os
 import subprocess
 import sys
 import threading
@@ -55,10 +56,15 @@ def _reversals(vals: list[float]) -> int:
     return sum(1 for a, b in zip(signs, signs[1:], strict=False) if a != b)
 
 
-def classify_gesture(xs: list[float], ys: list[float]) -> str | None:
-    """Return "yes" (nod), "no" (shake), or None from recent face-center tracks.
+def classify_gesture(
+    xs: list[float], ys: list[float], amplitude: float = _AMPLITUDE
+) -> str | None:
+    """Return "yes" (nod), "no" (shake), or None from recent motion tracks.
 
-    xs/ys are normalized horizontal/vertical face-center positions, oldest first.
+    xs/ys are oldest-first horizontal/vertical signals. With the Haar fallback these
+    are face-center positions (frame fractions); with the YuNet landmark path they
+    are head yaw/pitch (nose vs. eyes, inter-ocular-normalized) — hence the tunable
+    ``amplitude`` threshold, since the two signals live on different scales.
     """
     if len(ys) < _MIN_SAMPLES:
         return None
@@ -66,14 +72,14 @@ def classify_gesture(xs: list[float], ys: list[float]) -> str | None:
     amp_y = max(ys) - min(ys)
     # Vertical oscillation, dominant over horizontal => nod => yes.
     if (
-        amp_y > _AMPLITUDE
+        amp_y > amplitude
         and amp_y > amp_x * _DOMINANCE
         and _reversals(ys) >= _MIN_REVERSALS
     ):
         return "yes"
     # Horizontal oscillation, dominant over vertical => shake => no.
     if (
-        amp_x > _AMPLITUDE
+        amp_x > amplitude
         and amp_x > amp_y * _DOMINANCE
         and _reversals(xs) >= _MIN_REVERSALS
     ):
@@ -93,16 +99,20 @@ class HeadGestureDetector:
         on_gesture: Callable[[str], None],
         on_error: Callable[[str], None] | None = None,
         camera_index: int = 0,
+        prompt_text: str = "",
     ) -> None:
         self._on_gesture = on_gesture
         self._on_error = on_error or (lambda _msg: None)
         self._camera_index = camera_index
+        self._prompt_text = prompt_text
         self._proc: subprocess.Popen[str] | None = None
         self._reader: threading.Thread | None = None
 
     def start(self) -> None:
         if self._proc is not None:
             return
+        # Pass what the agent wants to do to the worker so it can show it in-window.
+        env = {**os.environ, "VIBE_GESTURE_PROMPT": self._prompt_text[:200]}
         try:
             self._proc = subprocess.Popen(
                 [sys.executable, "-m", _WORKER_MODULE, str(self._camera_index)],
@@ -110,6 +120,7 @@ class HeadGestureDetector:
                 stderr=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,  # line-buffered so we see each verdict immediately
+                env=env,
             )
         except Exception:
             logger.exception("Failed to launch head-gesture worker")

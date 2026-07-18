@@ -72,7 +72,7 @@ def _feed_nod(sess: _Session, t0: float) -> str | None:
     ys = [0.50, 0.50, 0.54, 0.58, 0.62, 0.60, 0.55, 0.50, 0.48, 0.50]
     result = None
     for i, y in enumerate(ys):
-        sess.observe((0.45, y - 0.05, 0.10, 0.10))
+        sess.observe(((0.45, y - 0.05, 0.10, 0.10), None))  # (box, no landmarks)
         result = sess.step(t0 + i * 0.05) or result
     return result
 
@@ -80,7 +80,7 @@ def _feed_nod(sess: _Session, t0: float) -> str | None:
 def test_confirmation_needs_two_repeats() -> None:
     # A single nod must not confirm; the second (after the cooldown) does.
     # Large base timestamps mimic time.monotonic() so the initial cooldown passes.
-    sess = _Session()
+    sess = _Session(pose_mode=False)  # Haar box-centroid path (matches the fixtures)
     assert _feed_nod(sess, 1000.0) is None
     assert sess.progress == ("yes", 1)
     assert _feed_nod(sess, 1003.0) == "yes"
@@ -88,10 +88,10 @@ def test_confirmation_needs_two_repeats() -> None:
 
 def test_mixed_gestures_do_not_accumulate() -> None:
     # A shake then a nod are different gestures — the count resets, no confirmation.
-    sess = _Session()
+    sess = _Session(pose_mode=False)  # Haar box-centroid path (matches the fixtures)
     xs = [0.50, 0.50, 0.54, 0.58, 0.62, 0.60, 0.55, 0.50, 0.48, 0.50]
     for i, x in enumerate(xs):
-        sess.observe((x - 0.05, 0.45, 0.10, 0.10))
+        sess.observe(((x - 0.05, 0.45, 0.10, 0.10), None))
         sess.step(2000.0 + i * 0.05)
     assert _feed_nod(sess, 2003.0) is None
     assert sess.progress == ("yes", 1)

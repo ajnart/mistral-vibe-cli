@@ -150,6 +150,7 @@ class ApprovalApp(VimNavigationMixin, Container):
         detector = HeadGestureDetector(
             on_gesture=lambda g: self.app.call_from_thread(self._on_head_gesture, g),
             on_error=lambda msg: self.app.call_from_thread(self.notify, msg),
+            prompt_text=self._gesture_prompt_text(),
         )
         self._gesture_detector = detector
         detector.start()
@@ -161,6 +162,18 @@ class ApprovalApp(VimNavigationMixin, Container):
                     f"{shortcut('shake')} deny"
                 )
             )
+
+    def _gesture_prompt_text(self) -> str:
+        """A short "what the agent wants to do" string to show in the webcam window."""
+        try:
+            data = self.tool_args.model_dump()
+        except Exception:
+            return self.tool_name
+        for key in ("command", "cmd", "file_path", "path", "url", "query", "pattern"):
+            value = data.get(key)
+            if value:
+                return f"{self.tool_name}: {value}"
+        return self.tool_name
 
     def _stop_gesture_detection(self) -> None:
         detector = self._gesture_detector
