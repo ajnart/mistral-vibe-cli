@@ -1,0 +1,43 @@
+vibe/core/config/vibe_schema.py
+  s_75684c583542d2::t_57c29f38a31df5 317-324
+tests/cli/test_head_gesture.py
+  s_75684c583542d2::t_3321bfd322b0e2 1-62
+vibe/cli/textual_ui/widgets/approval_app.py
+  s_75684c583542d2::t_48402a1e9cc1ef 172-174,177-179
+  s_75684c583542d2::t_84c2def9ddc087 100
+  s_75684c583542d2::t_7fb52c5f3212f0 156-163
+  s_75684c583542d2::t_1ec28953727708 142-155,164-171,175-176,180-183
+README.md
+  s_75684c583542d2::t_98650ad7911f5d 70
+  s_75684c583542d2::t_85f0f0454f05a7 319-343
+pyproject.toml
+  s_75684c583542d2::t_757dcd908ea1a3 128-133
+vibe/cli/textual_ui/head_gesture.py
+  s_75684c583542d2::t_2cd7c159d90104 54,59
+  s_75684c583542d2::t_c4ded6752753a6 149-150,152-153,167-168,172-185
+  s_75684c583542d2::t_c1e7c6405f8255 169-171
+  s_75684c583542d2::t_613078cd889415 17-18
+  s_75684c583542d2::t_f65696135cccf7 1-16,21-22,24-25,36-53,55-58,60-106,117-132,137-148,151,154-166
+  s_75684c583542d2::t_da17f2d54c37a4 107-116
+  s_75684c583542d2::t_a43584e70a275d 133-136
+  s_75684c583542d2::t_a0022bfcbeb0db 19-20,26-35
+  s_75684c583542d2::t_17db046962347f 23
+uv.lock
+  s_75684c583542d2::t_ab85e57d2fb351 6-8,10-12,939-943,1019,1074,1177-1244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "9ed9b839ec898f87c3094c1a486cb8d3a094c2ac",
+  "prompts": {},
+  "sessions": {
+    "s_75684c583542d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d0de606-dfe7-4016-b195-165d2a24e8db",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Thomas Camlong <thomas@ajnart.fr>"
+    }
+  }
+}
