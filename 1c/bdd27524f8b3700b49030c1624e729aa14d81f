@@ -1,0 +1,23 @@
+vibe/cli/textual_ui/head_gesture_worker.py
+  s_75684c583542d2::t_2ab3f323c53ce3 18-20,44-50,52-73,75-86,88,100-124,138-139,141-142
+  s_75684c583542d2::t_fbbf41d94fab07 34-36
+  s_75684c583542d2::t_0bb226c091fd83 89-99
+README.md
+  s_75684c583542d2::t_13e2ea11193296 342
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "1cbdd27524f8b3700b49030c1624e729aa14d81f",
+  "prompts": {},
+  "sessions": {
+    "s_75684c583542d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d0de606-dfe7-4016-b195-165d2a24e8db",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Thomas Camlong <thomas@ajnart.fr>"
+    }
+  }
+}
