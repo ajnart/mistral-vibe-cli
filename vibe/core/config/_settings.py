@@ -264,6 +264,7 @@ class VibeConfig(BaseSettings):
     displayed_workdir: str = ""
     context_warnings: bool = False
     voice_mode_enabled: bool = False
+    head_gesture_approval_enabled: bool = False
     narrator_enabled: bool = False
     active_transcribe_model: str = DEFAULT_ACTIVE_TRANSCRIBE_MODEL_CONFIG.alias
     active_tts_model: str = DEFAULT_ACTIVE_TTS_MODEL_CONFIG.alias

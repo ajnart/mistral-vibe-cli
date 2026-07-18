@@ -3,8 +3,13 @@
 Two independent pieces:
   - ``classify_gesture`` — pure math over recent face-center positions. No camera,
     fully unit-testable (see ``tests/cli/test_head_gesture.py``).
-  - ``HeadGestureDetector`` — a background thread that reads frames, finds the
-    largest face with an OpenCV Haar cascade, and feeds its center to the classifier.
+  - ``HeadGestureDetector`` — spawns ``head_gesture_worker`` as a subprocess and
+    turns the ``yes``/``no`` lines it prints into ``on_gesture`` callbacks.
+
+Why a subprocess and not just a thread: the worker shows a live preview window
+(``cv2.imshow``), and OpenCV's HighGUI *and* macOS camera authorization both
+require the process's MAIN thread — neither works from a background thread inside
+the Textual app. A child process has its own main thread, so it gets both for free.
 
 Ceiling: Haar-cascade face tracking is cheap but jittery under bad lighting and
 loses the face at steep angles. Upgrade path if this ever graduates from
@@ -14,29 +19,18 @@ classify head *pose* (pitch/yaw) instead of bounding-box centroid drift.
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Callable
-import os
+import subprocess
 import sys
 import threading
-import time
-from typing import Any
 
 from vibe.core.logger import logger
 
-# macOS calibration: we open the camera from a worker thread, but AVFoundation can
-# only *request* camera authorization from the main thread (it tries to spin the
-# main run loop and fails otherwise). Skip the in-thread request; the terminal app
-# gets camera permission through the normal OS (TCC) prompt on first real use.
-# Ceiling: if the terminal has never been granted camera access, capture fails and
-# we surface a friendly error instead of a prompt — grant it in System Settings >
-# Privacy & Security > Camera, then retry.
-if sys.platform == "darwin":
-    os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
+_WORKER_MODULE = "vibe.cli.textual_ui.head_gesture_worker"
 
 # All positions are normalized to frame size (0..1), so thresholds are resolution
 # independent. Tuned by hand against a 720p webcam at ~15 fps — recalibrate if the
-# gesture feels too twitchy or too sluggish.
+# gesture feels too twitchy or too sluggish. Shared with the worker process.
 _WINDOW = 20  # ~1.3s of frames; the rolling buffer of face centers we classify over
 _MIN_SAMPLES = 8  # need enough motion history before we trust a verdict
 _AMPLITUDE = 0.05  # min peak-to-peak travel of the face center to count as a gesture
@@ -78,10 +72,10 @@ def classify_gesture(xs: list[float], ys: list[float]) -> str | None:
 
 
 class HeadGestureDetector:
-    """Watches the webcam on a daemon thread and fires ``on_gesture("yes"|"no")``.
+    """Runs the webcam preview worker and fires ``on_gesture("yes"|"no")``.
 
-    Callbacks run on the detector thread; the caller is responsible for hopping back
-    to its own event loop (Textual: ``app.call_from_thread``).
+    Callbacks run on a reader thread; the caller is responsible for hopping back to
+    its own event loop (Textual: ``app.call_from_thread``).
     """
 
     def __init__(
@@ -93,93 +87,64 @@ class HeadGestureDetector:
         self._on_gesture = on_gesture
         self._on_error = on_error or (lambda _msg: None)
         self._camera_index = camera_index
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        self._proc: subprocess.Popen[str] | None = None
+        self._reader: threading.Thread | None = None
 
     def start(self) -> None:
-        if self._thread is not None:
+        if self._proc is not None:
             return
-        self._thread = threading.Thread(
-            target=self._run, name="head-gesture", daemon=True
+        try:
+            self._proc = subprocess.Popen(
+                [sys.executable, "-m", _WORKER_MODULE, str(self._camera_index)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,  # line-buffered so we see each verdict immediately
+            )
+        except Exception:
+            logger.exception("Failed to launch head-gesture worker")
+            self._on_error("Head-gesture approval could not start.")
+            return
+        self._reader = threading.Thread(
+            target=self._read_loop, name="head-gesture-reader", daemon=True
         )
-        self._thread.start()
+        self._reader.start()
+
+    def _read_loop(self) -> None:
+        proc = self._proc
+        if proc is None or proc.stdout is None:
+            return
+        # The worker emits one token per line: yes | no | ERR_OPENCV | ERR_CAMERA.
+        for raw in proc.stdout:
+            line = raw.strip()
+            if line in {"yes", "no"}:
+                self._on_gesture(line)
+            elif line == "ERR_OPENCV":
+                self._on_error(
+                    "Head-gesture approval needs OpenCV. Install it with: "
+                    "pip install 'mistral-vibe[gesture]'  (or: pip install opencv-python)"
+                )
+            elif line == "ERR_CAMERA":
+                self._on_error("Head-gesture approval could not open the webcam.")
 
     def request_stop(self) -> None:
         """Signal the worker to exit without blocking.
 
         Safe to call from inside an ``on_gesture`` callback: that callback runs on
-        the caller's thread (via e.g. Textual's ``call_from_thread``) while the
-        worker thread is blocked waiting for it to return, so a ``join`` here would
-        deadlock. Use ``stop`` from a different thread to actually reap it.
+        the reader thread (via e.g. Textual's ``call_from_thread``, which blocks the
+        reader) so we must not join anything here. ``terminate`` just sends a signal.
         """
-        self._stop.set()
+        proc = self._proc
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
 
     def stop(self) -> None:
-        self._stop.set()
-        thread, self._thread = self._thread, None
-        if thread is not None:
-            thread.join(timeout=2.0)
-
-    def _run(self) -> None:
-        try:
-            import cv2
-        except ImportError:
-            self._on_error(
-                "Head-gesture approval needs OpenCV. Install it with: "
-                "pip install 'mistral-vibe[gesture]'  (or: pip install opencv-python)"
-            )
+        proc, self._proc = self._proc, None
+        if proc is None:
             return
-
-        cascade_path = (
-            cv2.data.haarcascades  # type: ignore[attr-defined]  # valid at runtime, no stub
-            + "haarcascade_frontalface_default.xml"
-        )
-        cascade = cv2.CascadeClassifier(cascade_path)
-        cap = cv2.VideoCapture(self._camera_index)
-        try:
-            if not cap.isOpened() or cascade.empty():
-                self._on_error("Head-gesture approval could not open the webcam.")
-                return
-
-            xs: deque[float] = deque(maxlen=_WINDOW)
-            ys: deque[float] = deque(maxlen=_WINDOW)
-            last_fire = 0.0
-
-            while not self._stop.is_set():
-                center = _largest_face_center(cv2, cap, cascade)
-                if center is None:
-                    continue
-                xs.append(center[0])
-                ys.append(center[1])
-
-                gesture = classify_gesture(list(xs), list(ys))
-                now = time.monotonic()
-                if gesture and (now - last_fire) > _COOLDOWN_S:
-                    last_fire = now
-                    xs.clear()
-                    ys.clear()
-                    self._on_gesture(gesture)
-        except Exception:  # camera/driver hiccups shouldn't crash the TUI
-            logger.exception("Head-gesture detector crashed")
-            self._on_error("Head-gesture approval stopped after an error.")
-        finally:
-            cap.release()
-
-
-def _largest_face_center(
-    cv2: Any, cap: Any, cascade: Any
-) -> tuple[float, float] | None:
-    """Read one frame; return the largest face's normalized (x, y) center, or None."""
-    ok, frame = cap.read()
-    if not ok:
-        time.sleep(0.05)
-        return None
-    height, width = frame.shape[:2]
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = cascade.detectMultiScale(
-        gray, scaleFactor=1.2, minNeighbors=5, minSize=(80, 80)
-    )
-    if len(faces) == 0:
-        return None
-    fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
-    return (fx + fw / 2) / width, (fy + fh / 2) / height
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
