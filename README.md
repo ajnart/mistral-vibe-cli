@@ -339,7 +339,7 @@ Then enable it in `config.toml` (`./.vibe/config.toml` or `~/.vibe/config.toml`)
 head_gesture_approval_enabled = true
 ```
 
-The webcam is only opened while a permission prompt is on screen, and is released the moment the prompt is answered or dismissed.
+The webcam is only opened while a permission prompt is on screen, and is released the moment the prompt is answered or dismissed. On macOS it prefers the built-in camera (skipping iPhone Continuity Camera); set `VIBE_GESTURE_CAMERA=<index>` to force a specific camera.
 
 ## Slash Commands
 

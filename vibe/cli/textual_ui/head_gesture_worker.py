@@ -15,6 +15,9 @@ Exits when the parent terminates it, the preview window is closed, or 'q' is pre
 from __future__ import annotations
 
 from collections import deque
+import json
+import os
+import subprocess
 import sys
 import time
 from typing import Any
@@ -28,6 +31,9 @@ _BORDER = 3  # accent frame thickness (px)
 _MARGIN = 24  # gap from the top-right screen corner (px)
 _ACCENT = (0, 140, 255)  # BGR ~orange
 _BAR = (28, 28, 28)  # header/footer bar
+_CAMERA_ENV = (
+    "VIBE_GESTURE_CAMERA"  # override with an explicit index if auto-pick is wrong
+)
 
 
 def _emit(token: str) -> None:
@@ -35,17 +41,87 @@ def _emit(token: str) -> None:
 
 
 def _screen_width(default: int = 1440) -> int:
-    """Best-effort primary-screen width via stdlib Tk, so we can hug the top-right."""
-    try:
-        import tkinter
+    """Primary-screen width in points via CoreGraphics (ctypes), to hug top-right.
 
-        root = tkinter.Tk()
-        root.withdraw()
-        width = root.winfo_screenwidth()
-        root.destroy()
-        return width
+    Uses ctypes rather than tkinter: Tk 9 aborts the process on window creation on
+    macOS 26. Non-mac / failure -> a sane default.
+    """
+    if sys.platform != "darwin":
+        return default
+    try:
+        import ctypes
+
+        class _Size(ctypes.Structure):
+            _fields_ = [("w", ctypes.c_double), ("h", ctypes.c_double)]
+
+        class _Rect(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double), ("size", _Size)]
+
+        cg = ctypes.CDLL(
+            "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+        )
+        cg.CGMainDisplayID.restype = ctypes.c_uint32
+        cg.CGDisplayBounds.restype = _Rect
+        cg.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+        width = int(cg.CGDisplayBounds(cg.CGMainDisplayID()).size.w)
+        return width if width > 0 else default
     except Exception:
-        return default  # headless / no Tk — fall back to a sane guess
+        return default
+
+
+def _mac_builtin_camera_index() -> int | None:
+    """Index of the built-in (FaceTime) camera, so we skip iPhone Continuity Camera.
+
+    Ceiling: assumes ``system_profiler``'s camera order matches OpenCV's AVFoundation
+    device index order (it does in practice). If it ever doesn't, set the
+    VIBE_GESTURE_CAMERA env var to the right index.
+    """
+    try:
+        out = subprocess.run(
+            ["system_profiler", "SPCameraDataType", "-json"],
+            capture_output=True,
+            text=True,
+            timeout=6,
+        )
+        cams = json.loads(out.stdout).get("SPCameraDataType", [])
+    except Exception:
+        return None
+
+    names = [c.get("_name", "").lower() for c in cams]
+    # Built-in Macs name it "MacBook Pro Camera" / "FaceTime HD Camera" / etc.
+    builtin = ("macbook", "imac", "mac mini", "mac studio", "facetime", "built-in")
+    external = ("iphone", "ipad", "continuity", "desk view")
+    for idx, name in enumerate(names):
+        if any(k in name for k in builtin):
+            return idx
+    # Nothing matched a known Mac name — fall back to the first non-iPhone camera.
+    for idx, name in enumerate(names):
+        if not any(k in name for k in external):
+            return idx
+    return None
+
+
+def _resolve_camera_index(requested: int) -> int:
+    """Explicit env override > built-in Mac camera > whatever was requested."""
+    env = os.environ.get(_CAMERA_ENV, "").strip()
+    if env.lstrip("-").isdigit():
+        return int(env)
+    if sys.platform == "darwin":
+        builtin = _mac_builtin_camera_index()
+        if builtin is not None:
+            return builtin
+    return requested
+
+
+def _open_camera(cv2: Any, requested: int) -> Any:
+    """Open the preferred camera; fall back to scanning the first few indices."""
+    preferred = _resolve_camera_index(requested)
+    for idx in [preferred, 0, 1, 2, 3]:
+        cap = cv2.VideoCapture(idx)
+        if cap.isOpened():
+            return cap
+        cap.release()
+    return None
 
 
 def main(camera_index: int = 0) -> int:
@@ -59,10 +135,11 @@ def main(camera_index: int = 0) -> int:
         cv2.data.haarcascades  # type: ignore[attr-defined]  # valid at runtime, no stub
         + "haarcascade_frontalface_default.xml"
     )
-    cap = cv2.VideoCapture(camera_index)
-    if not cap.isOpened() or cascade.empty():
+    cap = _open_camera(cv2, camera_index)
+    if cap is None or cascade.empty():
         _emit("ERR_CAMERA")
-        cap.release()
+        if cap is not None:
+            cap.release()
         return 1
 
     cv2.namedWindow(_WINDOW_TITLE, cv2.WINDOW_AUTOSIZE)
