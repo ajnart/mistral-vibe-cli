@@ -314,6 +314,14 @@ class VibeConfigSchema(ConfigSchema):
     displayed_workdir: Annotated[str, WithReplaceMerge()] = ""
     context_warnings: Annotated[bool, WithReplaceMerge()] = False
     voice_mode_enabled: Annotated[bool, WithReplaceMerge()] = False
+    head_gesture_approval_enabled: Annotated[bool, WithReplaceMerge()] = Field(
+        default=False,
+        description=(
+            "Experimental: approve/deny tool permission prompts with head gestures via"
+            " the webcam. Nod (up/down) = allow once, shake (left/right) = deny."
+            " Requires the 'gesture' extra (opencv-python). Disabled by default."
+        ),
+    )
     narrator_enabled: Annotated[bool, WithReplaceMerge()] = False
     bypass_tool_permissions: Annotated[bool, WithReplaceMerge()] = False
     raise_on_compaction_failure: Annotated[bool, WithReplaceMerge()] = False

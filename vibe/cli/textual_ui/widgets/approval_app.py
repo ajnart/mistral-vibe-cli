@@ -97,6 +97,7 @@ class ApprovalApp(VimNavigationMixin, Container):
         self.option_widgets: list[Static] = []
         self.help_widget: Static | None = None
         self._mount_time: float = 0.0
+        self._gesture_detector: object | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="approval-content"):
@@ -138,6 +139,48 @@ class ApprovalApp(VimNavigationMixin, Container):
         self.screen.screen_layout_refresh_signal.subscribe(
             self, lambda _screen: self._recompute_height()
         )
+        self._start_gesture_detection()
+
+    def _start_gesture_detection(self) -> None:
+        if not getattr(self.config, "head_gesture_approval_enabled", False):
+            return
+        # Lazy import: OpenCV is an optional extra and heavy to import.
+        from vibe.cli.textual_ui.head_gesture import HeadGestureDetector
+
+        detector = HeadGestureDetector(
+            on_gesture=lambda g: self.app.call_from_thread(self._on_head_gesture, g),
+            on_error=lambda msg: self.app.call_from_thread(self.notify, msg),
+        )
+        self._gesture_detector = detector
+        detector.start()
+        if self.help_widget is not None:
+            self.help_widget.update(
+                shortcut_hint(
+                    f"{shortcut('↑↓/jk')} navigate  {shortcut('Enter')} select  "
+                    f"{shortcut('Esc')} reject  {shortcut('nod')} allow  "
+                    f"{shortcut('shake')} deny"
+                )
+            )
+
+    def _stop_gesture_detection(self) -> None:
+        detector = self._gesture_detector
+        self._gesture_detector = None
+        if detector is not None:
+            detector.stop()  # type: ignore[attr-defined]
+
+    def _on_head_gesture(self, gesture: str) -> None:
+        # Runs on the UI thread (via call_from_thread) while the detector thread is
+        # blocked waiting for us — so only *signal* stop here, never join (that would
+        # deadlock). The real join happens in on_unmount once this returns.
+        # Nod = allow once (option 0), shake = deny (option 3). Grace period still
+        # applies via _select_if_unguarded, so a stray gesture on mount is ignored.
+        detector = self._gesture_detector
+        if detector is not None:
+            detector.request_stop()  # type: ignore[attr-defined]
+        self._select_if_unguarded(0 if gesture == "yes" else 3)
+
+    def on_unmount(self) -> None:
+        self._stop_gesture_detection()
 
     def _recompute_height(self) -> None:
         """Manual sizing: the scroll uses `1fr`, so `height: auto` cannot shrink to fit."""

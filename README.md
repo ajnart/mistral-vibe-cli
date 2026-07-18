@@ -67,6 +67,7 @@ pip install mistral-vibe
   - [Trust Folder System](#trust-folder-system)
   - [Programmatic Mode](#programmatic-mode)
 - [Voice Mode](#voice-mode)
+- [Head-Gesture Approval](#head-gesture-approval)
 - [Slash Commands](#slash-commands)
   - [Built-in Slash Commands](#built-in-slash-commands)
   - [Custom Slash Commands via Skills](#custom-slash-commands-via-skills)
@@ -314,6 +315,31 @@ Toggle voice mode on or off with the `/voice` slash command:
 | Any key  | Stop recording   |
 | `Escape` | Cancel recording |
 | `Ctrl+C` | Cancel recording |
+
+## Head-Gesture Approval
+
+> [!WARNING]
+> Head-gesture approval is experimental and disabled by default.
+
+Approve or deny tool permission prompts with your head via the webcam — **nod** (up/down) to allow once, **shake** (left/right) to deny. Keyboard approval keeps working as usual; gestures are just an extra input on the same prompt.
+
+It uses OpenCV Haar-cascade face tracking, which ships as an optional extra so the base install stays lean:
+
+```bash
+# with pip
+pip install 'mistral-vibe[gesture]'
+
+# with uv (from a checkout of this fork)
+uv sync --extra gesture
+```
+
+Then enable it in `config.toml` (`./.vibe/config.toml` or `~/.vibe/config.toml`):
+
+```toml
+head_gesture_approval_enabled = true
+```
+
+The webcam is only opened while a permission prompt is on screen, and is released the moment the prompt is answered or dismissed.
 
 ## Slash Commands
 

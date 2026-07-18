@@ -125,6 +125,12 @@ dependencies = [
     "zstandard==0.25.0",
 ]
 
+[project.optional-dependencies]
+# Head-gesture approval (nod = yes, shake = no) via the webcam. Opt-in: OpenCV
+# ships large platform-specific wheels, so it's not in the base install. Enable
+# with `head_gesture_approval_enabled` in config. See README "Head-gesture approval".
+gesture = ["opencv-python==4.11.0.86"]
+
 [project.urls]
 Homepage = "https://github.com/mistralai/mistral-vibe"
 Repository = "https://github.com/mistralai/mistral-vibe"

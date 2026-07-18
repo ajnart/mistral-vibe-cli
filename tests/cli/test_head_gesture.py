@@ -1,0 +1,62 @@
+"""Self-check for the pure gesture classifier (no camera needed).
+
+Run: uv run pytest tests/cli/test_head_gesture.py
+"""
+
+from __future__ import annotations
+
+from vibe.cli.textual_ui.head_gesture import classify_gesture
+
+
+def _nod() -> tuple[list[float], list[float]]:
+    # Face parked at center X, head bobs down then back up (vertical oscillation).
+    ys = [0.50, 0.50, 0.54, 0.58, 0.62, 0.60, 0.55, 0.50, 0.48, 0.50]
+    xs = [0.50] * len(ys)
+    return xs, ys
+
+
+def _shake() -> tuple[list[float], list[float]]:
+    # Face parked at center Y, head turns right then back left (horizontal).
+    xs = [0.50, 0.50, 0.54, 0.58, 0.62, 0.60, 0.55, 0.50, 0.48, 0.50]
+    ys = [0.50] * len(xs)
+    return xs, ys
+
+
+def test_nod_is_yes() -> None:
+    assert classify_gesture(*_nod()) == "yes"
+
+
+def test_shake_is_no() -> None:
+    assert classify_gesture(*_shake()) == "no"
+
+
+def test_still_face_is_none() -> None:
+    flat = [0.5] * 10
+    assert classify_gesture(flat, flat) is None
+
+
+def test_tiny_jitter_is_none() -> None:
+    # Sub-threshold wobble on both axes must not trigger a false approval.
+    xs = [0.500, 0.501, 0.500, 0.499, 0.500, 0.501, 0.500, 0.499, 0.500, 0.501]
+    ys = [0.500, 0.499, 0.500, 0.501, 0.500, 0.499, 0.500, 0.501, 0.500, 0.499]
+    assert classify_gesture(xs, ys) is None
+
+
+def test_too_few_samples_is_none() -> None:
+    assert classify_gesture([0.5, 0.6, 0.4], [0.5, 0.6, 0.4]) is None
+
+
+def test_diagonal_ambiguous_is_none() -> None:
+    # Equal travel on both axes: not clearly a nod or a shake, so no verdict.
+    diag = [0.50, 0.54, 0.58, 0.62, 0.60, 0.55, 0.50, 0.48, 0.50, 0.52]
+    assert classify_gesture(diag, list(diag)) is None
+
+
+if __name__ == "__main__":
+    test_nod_is_yes()
+    test_shake_is_no()
+    test_still_face_is_none()
+    test_tiny_jitter_is_none()
+    test_too_few_samples_is_none()
+    test_diagonal_ambiguous_is_none()
+    print("all head-gesture classifier checks passed")
